@@ -1,6 +1,6 @@
 from langchain_community.llms import Ollama
 from langchain_openai import OpenAI
-from langchain.chains import LLMChain
+from langchain.schema.runnable import RunnableSequence
 from langchain.prompts import PromptTemplate
 from tools import logger
 
@@ -34,8 +34,8 @@ class LLM:
             llm = OpenAI(model_name=model_id)
         else:
             raise ValueError("Unsupported model type")
-        self.summary_chain = LLMChain(prompt=self.summary_prompt_template, llm=llm)
-        self.translate_chain = LLMChain(prompt=self.translate_prompt_template, llm=llm)
+        self.summary_chain = self.summary_prompt_template | llm
+        self.translate_chain = self.translate_prompt_template | llm
 
     def generate_summary(self, content: str) -> str:
         logger.info("Generating summary...")
