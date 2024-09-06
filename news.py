@@ -18,29 +18,30 @@ from langchain.prompts import PromptTemplate
 new_sources = ["bloomberg", "reuters"]
 OK, ERR = 1, 0
 
-
 logger = loguru.logger
 parser = argparse.ArgumentParser(
-                    prog='get latest news.',
-                    description=f'get latest news from {", ".join(new_sources)}')
+    prog='get latest news.',
+    description=f'get latest news from {", ".join(new_sources)}')
 parser.add_argument('-t', '--topic', help="your interest topic", default="")
 parser.add_argument('-s', '--source', help="news's source", default="bloomberg")
 parser.add_argument('-l', "--url", help="article url, to get whole content", default="")
 parser.add_argument('--summary', help="summary article by llm", default=False, action="store_true")
 parser.add_argument('--translate', help=" translate the title and brief", default=False, action="store_true")
 
+
 def text_output(text: str, max_line_num=100):
     start = 0
     total_len = len(text)
     while total_len > max_line_num:
-        print(text[start:start+max_line_num])
+        print(text[start:start + max_line_num])
         start += max_line_num
         total_len -= max_line_num
+
 
 def translate_text(text):
     data = [text, "en", "zh"]
     url = "https://hf.space/embed/mikeee/gradio-deepl/+/api/predict"
-    resp = requests.post(url,json={"data": data})
+    resp = requests.post(url, json={"data": data})
     if resp.status_code == 200:
         print(resp.json())
         return resp.json()["data"][0]
@@ -52,6 +53,7 @@ def retry_on_error(retry_times=3):
     被装饰的函数必须同时返回结果、和状态码
     状态码 OK, ERR = 1, 0
     """
+
     def wrapper(func):
         def inner(self, *args, **kwargs):
             for n in range(retry_times):
@@ -59,17 +61,18 @@ def retry_on_error(retry_times=3):
                 if status == OK:
                     return result
                 else:
-                    logger.warning(f"retry {1+n} times")
-                    time.sleep(1+n)
+                    logger.warning(f"retry {1 + n} times")
+                    time.sleep(1 + n)
             return result
+
         return inner
+
     return wrapper
 
 
 class LLM:
-
     summary_prompt_template = PromptTemplate(template=
-    """
+                                             """
     I want you to act as a News Article summarizer. 
     I will provide you with a article on a specific topic: 
     {article}
@@ -81,12 +84,12 @@ class LLM:
       finally, I need u translating it to chinese.
     """, input_variables=["article"])
     translate_prompt_template = PromptTemplate(template=
-        """
+                                               """
         You are an expert in Chinese-English translation and you need to translate the English content:
         {content}
         I give you into meaningful Chinese. 
         """, input_variables=["content"]
-    )
+                                               )
 
     def __init__(self, model_type: str, model_id: str) -> None:
         if model_type == "Ollama":
@@ -103,9 +106,10 @@ class LLM:
         summary_content = self.summary_chain.run(content)
         logger.info("Summary generated. and translate...")
         return self.translate(summary_content)
-    
+
     def translate(self, content: str) -> str:
         return self.translate_chain.run(content)
+
 
 # openai
 # llm = LLM(model_type="OpenAI", model_id="gpt-3.5-turbo-instruct")
@@ -135,12 +139,11 @@ class NewsArticle(BaseModel):
 
 
 class News:
-
     source = ""
     __url = "https://static.newsfilter.io/landing-page/articles-{source}.json"
 
     @retry_on_error()
-    def get_articles(self, topic: str = "") -> (List[NewsArticle], int): # type: ignore
+    def get_articles(self, topic: str = "") -> (List[NewsArticle], int):  # type: ignore
         try:
             response = requests.get(self.__url.format(source=self.source))
         except requests.exceptions.RequestException as e:
@@ -149,7 +152,8 @@ class News:
         else:
             if response.status_code == 200:
                 if topic:
-                    return [NewsArticle.serialize(**article) for article in response.json() if topic in article["description"]], OK
+                    return [NewsArticle.serialize(**article) for article in response.json() if
+                            topic in article["description"]], OK
                 return [NewsArticle.serialize(**article) for article in response.json()], OK
             else:
                 logger.warning("Error: Unable to fetch news from {}, detail: {}".format(self.source, response.text))
@@ -160,11 +164,10 @@ class News:
 
 
 class Bloomberg(News):
-
     source = "bloomberg"
 
     @retry_on_error()
-    def get_article_content(self, article_url: str) -> (str, int): # type: ignore
+    def get_article_content(self, article_url: str) -> (str, int):  # type: ignore
         try:
             response = requests.get(article_url)
         except requests.exceptions.RequestException as e:
@@ -185,7 +188,7 @@ class Bloomberg(News):
 
     def get_articles(self, topic: str):
         return super().get_articles(topic)
-    
+
     def get_summary(self, topic: str, top_k: int = 3):
         _summary = []
         articles = self.get_articles(topic)
@@ -198,11 +201,11 @@ class Bloomberg(News):
                 logger.info(f"Generating summary for {article.title}...")
                 text_output(llm.generate_summary(self.get_article_content(article.url)))
         return _summary
-    
+
     def get_brief(self, topic: str, translate: bool):
         articles = self.get_articles(topic)
         for article in articles:
-            print("-"*30)
+            print("-" * 30)
             print(f"title: {article.title}")
             if translate:
                 print(f"translated title: {translate_text(article.title)}")
@@ -213,7 +216,8 @@ class Bloomberg(News):
             if translate:
                 print(f"translated brief: ")
                 text_output(translate_text(brief))
-            print("-"*30)
+            print("-" * 30)
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -221,12 +225,12 @@ if __name__ == "__main__":
         client = Bloomberg()
         if args.url:
             article_content = client.get_article_content(args.url)
-            print("-"* 100)
+            print("-" * 100)
             text_output(article_content)
-            print("-"* 100)
+            print("-" * 100)
             if args.summary:
                 text_output(llm.generate_summary(article_content))
-                print("-"* 100)
+                print("-" * 100)
         else:
             client.get_brief(args.topic, translate=args.translate)
     else:
